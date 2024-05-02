@@ -1,0 +1,441 @@
+---
+title: "Data Vis Assignment"
+author: "William Ragland"
+date: "2024-04-19"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# lets instal our basic packages that may be used in this assignment
+
+```{r}
+require(rmarkdown)
+require(knitr)
+require(lubridate)
+require(stringr)
+require(ggplot2)
+require(dplyr)
+require(tidyr)
+library(gridExtra)
+
+#if any packages are missed here, they are installed below. with the code that needs them to run
+```
+
+#Introduction:
+This module has revolved around ways to present and utilize various charts, graphs, and plots with R studio to create a visual story for different data sets. The scope of this project is to tell a story with the two data sets provided, crime2023 and temp2023. The main focus of this story will revolve around the crime 2023 data set, as it has the most useful information between the two. In the end, the goal of this report will be to touch a little bit on each type of chart used within the MA304 lecture and show a visually appealing road work for the two data sets.
+
+
+
+
+## Downloading our data sets
+
+To begin, both data sets must be downloaded. In order to do so a simple read.csv command will be run. 
+
+#In order to follow along with the project please download the required files and change your code to refelect the save point on your own device. 
+
+```{r}
+crime <- read.csv('C:/Users/wtrag/OneDrive/Documents/Data Vis Work/crime23.csv')
+temp <- read.csv('C:/Users/wtrag/OneDrive/Documents/Data Vis Work/temp2023.csv')
+
+
+#take a look at both data sets
+View(crime) 
+View(temp)
+
+
+#take a look at number of variables and columns in each data set
+dim(crime)
+dim(temp)
+```
+
+
+
+#Data Cleaning
+
+The data sets provided will need to be cleaned before they are available for use. In order to begin this a common column must be decided to merge the two data sets on. In this case it will be the date columns, which will need to be averaged among all columns to allow a proper merge between data sets.
+
+```{r}
+require(dplyr)
+
+crime$date<- ym(crime$date) #change the date formatting to year month
+temp$Date<- ymd(temp$Date)#change the date formatting to year month day
+
+temp$month <- format(temp$Date, '%m') #create a new column month that will have the month variable only and will allow both data sets to be merged
+
+avg_temp <- temp %>% #create an average temperature section
+  group_by(month) %>% #group by new month variable
+  summarise(across(everything(), mean)) #get the mean of all numerical values placed within the month variable
+
+crime$month<- format(crime$date, '%m') #add month to crime data
+
+#merge
+merger <- merge(crime, avg_temp, by = 'month') #merge on month
+
+#drop unnecessary columns
+
+columns_to_drop <- c("PreselevHp", "SnowDepcm", "PresslevHp", "context", "WindkmhDir", "WindkmhGust", "Precmm", "lowClOct", "SunD1h")
+clean_data <- merger[, !names(merger) %in% columns_to_drop]
+
+names(clean_data) #check the names of the categories to use in our visualizations later
+
+```
+
+## Bar Graphs
+
+```{r}
+#used stack overflow for help with color coding on this particular pallete in reference 1
+
+table(clean_data$location_type, clean_data$location_subtype) #create a table to see how many counts per variable we have. Looks like all crime were committed and handled by the British force, with a handful being done by the BTP
+
+location_crime<-ggplot(clean_data, aes(x = location_type, fill = location_subtype)) + #create a ggplot bar chart called location
+  geom_bar() + 
+  labs(title = 'Location of Crimes')+ #label
+  theme_minimal()
+
+street_freq <- table(clean_data$street_name) #create a table for all relevant streets
+
+street_df<- as.data.frame(street_freq, stringsAsFactors = FALSE) #turn into a data frame
+names(street_df)<- c('street_name', 'frequency') #name our columns
+street_df <- street_df[order(-street_df$frequency), ] #order our data frame by popular streets
+
+
+violent_10st <- head(street_df, 10) #select top ten
+
+#createa  abr chart showing top ten crime realated streets
+top_10_crime<- ggplot(violent_10st, aes(x = reorder(street_name, frequency), y = frequency)) +
+  geom_bar(stat = "identity", fill = 'green', color = "black") +
+  labs(x = "Street Name", y = "Frequency", title = "Top 10 Most Frequent Street Names") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+gridExtra::grid.arrange(location_crime, top_10_crime, ncol = 2) #put both charts on one image
+
+```
+The above Creates a visual based on locations. The first graph represents the location of where the crime takes place, that is to say which jurisdiction it occurs in. The most common place is somewhere where the normal police force has precedence. The BTP only had a total of 24 cases, according to this, alluding to the fact that less crimes happen on the transportation systems.The second graph in green gives a bit more telling of a story, highlighting the most dangerous streets in Colchester. The most dangerous street ends up being 'on or near' which may have been a clerical error in the data set. The next most dangerous street is anywhere near a shopping area, which holds true as shoplifting or petty theft would seem easier to pull off in populated market areas.
+
+
+##Pie Chart
+```{r}
+
+#through the duration of this project, please keep in mind that I am colorblind, so while these colors may not be the most appealing to others, they are the only way I can distinguish them properly on my end.
+require('viridis')
+
+category_count<- table(crime$category) #create a category count that gives counts per crime 
+
+
+print(category_count) #print this results to view 
+
+#new data frame designed with the above table to make our pie chart
+pie_chart_data <- data.frame(
+  category = names(category_count),
+  proportion = rep(1/length(category_count)), length(category_count)) 
+  
+#create a bar chart 
+ggplot(pie_chart_data, aes(x= "", y = category_count, fill = category)) +
+  geom_bar(stat = 'identity', width=1) +
+  coord_polar("y", start = 0) +
+  labs(title= 'Crime Categories')+
+  scale_fill_viridis_d() +
+  theme_void()
+  
+```
+Though a simple graph is produced, it makes the categories of crimes easy to read. Showcasing the highest rate of crime being violent ones, which would make sense as it is quite a broad range for data so it may encompass 100's of different sub-types. This category is followed closely by anti-social behavior. Again, this seems to be a very broad category allowing for different sub-types to be represented within it. A crime may be reported as anti-social if it was nothing more than people walking down the street in a sketchy manor. With more information from the police department these categories could be broken down into more meticulous genres and create a much more robust pie chart to interpret. 
+
+
+##Bar Chart
+
+```{r}
+
+#used code from stack overflow in reference 2 for the below to find out how to fill by category
+
+#group the data by street and category
+st_crime <- clean_data %>% #new data for street crime
+  group_by(street_name, category) %>% #group by streets
+  summarise(count = n()) %>% #summaries counts
+  ungroup()
+
+#find top 10 streets again
+st10 <- st_crime %>% #top ten streets by crime
+  group_by(street_name) %>%
+  summarise(total_count = sum(count)) %>%
+  top_n(10, total_count) %>%
+  pull(street_name)
+
+#filter to only determine top 10 streets
+top_10 <- st_crime %>%
+  filter(street_name %in% st10)
+
+
+#ggplot to create bar chart
+ggplot(top_10, aes(x = street_name, y = count, fill = category)) + #variables being used
+  geom_bar(stat = "identity") +
+  labs(x = "Street Name", y = "Frequency", fill = "Type of Crime") +#labels
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  ggtitle("Top Streets for Crime with Category") #title
+
+```
+The above gives a nice break down to the top ten crime ridden streets showcased before. This time, however, the chart is broken down to showcase the most common category of crime per street. As predicted the most abundant type of crime within shopping areas is robbery/theft. On top of this, almost all of the streets see some form of violent crime in a rather large abundance.
+
+
+## Dot Plot
+
+```{r}
+#lets make a simple dot plot to look at the types of crimes and the results they typically face
+
+ggplot(clean_data, aes(x= category, y= outcome_status))+
+  geom_point(size=3)+
+  labs(x = "Crime", y = "Outcome", title = "Outcome of crimes") +  # Add axis labels and title
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+
+```
+The above chart, while not too relevant, does give insight into what type of outcomes each category tend to have when prosecuted. It is a little heartwarming to see that no violent crimes are left in the n/a outcome status, but also quite scary to see that they have a no suspect field as well. The anti-social behavior is the only crime left with a N/A outcome. More than likely this can be interpreted as a crime was not being committed, but someone who called the police may have been concerned about a suspicious character acting 'off'.
+
+
+##Histogram
+
+```{r}
+#let's take a different approach for our histogram and look at the average temperatures over the months. This could lead us to a conclusion on what type of weather criminals prefer!
+
+hist_Visibility <- ggplot(clean_data, aes(x= VisKm))+ #create a name for the graph so it can be put into a multi-layer page
+  geom_histogram(binwidth = 1, fill = 'green', color = "black", alpha = 0.6)+
+  labs(title = 'Histogram of Visibility', xlab = 'Visibility', ylab= 'Frequency')+
+  theme_minimal()
+
+
+hist_cloud <- ggplot(clean_data, aes(x = TotClOct)) +
+  geom_histogram(binwidth = 1, fill = "green", color = "black", alpha = 0.6)+
+  labs(x = "TotClOct", y = "Frequency", title = "Histogram of TotClOct")
+
+gridExtra::grid.arrange(hist_Visibility, hist_cloud, ncol = 2)
+
+
+```
+Shifting gears a little, the two graphs above take a look at the temperature portion of the merged data. These could be utilized to find patterns in criminal activity based on the visibility and cloudiness during certain months. The above graphs only tell a simple story of how frequently the visibility drops below a certain range and how cloudy the sky will get. More can be done with these, but for the purpose of this assignment there is not enough relevant information to clearly argue that these two variables effect crimes in Colchester.
+
+
+##Density plot
+
+```{r}
+#code from this was found on stack overflow referenced in 3
+
+# Load necessary libraries
+library(ggplot2)
+library(plotly)
+
+# create a new variable for only the numeric data sets to work with
+numeric_vars <- c("TemperatureCAvg", "TemperatureCMax", "TemperatureCMin", "TdAvgC", "HrAvg", "WindkmhInt", "TotClOct", "VisKm")
+
+multiplot<- list() #create a blank list to store them in
+
+
+# Create new density plots with  a for loop going through each of the above saved numeric variables
+for (var in numeric_vars) {
+  plot <- ggplot(clean_data, aes(x = !!sym(var))) +
+    geom_density(fill = "green", alpha = 0.5) +
+    labs(x = var, y = "Density", title = paste("Density Plot of all numeric Variables")) +
+    theme_minimal()
+  multiplot[[var]] <- ggplotly(plot)  # Convert ggplot to plotly to make it interactive
+}
+
+subplot(multiplot, nrows = length(numeric_vars) %/% 2, margin = 0.05) #create a grid to show all plots
+
+```
+Sticking with the temperature portion of the data, each graph pictured above gives and idea into the overall density of numerical variables in the data set. They can be utilized to see the different modes present in the numerical variables represented by the varying peaks in the graphs. 
+
+##Violin plots
+
+```{r}
+
+# visualize the data with ggplot 'violin'
+ggplot(clean_data, aes(x = clean_data$TemperatureCAvg, y = '', fill = category)) +
+  geom_violin(trim = FALSE) +  # Add violin plot
+  labs(x = "Temperature Average", y = "Frequency", title = "Violin Plot of Crime Categories Based on Temperature") +
+  theme_minimal()  
+
+
+
+```
+
+
+The numerical values themselves will only give so much information. The next step is to overlay them with the crime data and see if there is any form of correlation between weather and crime. The idea behind this plot is to utilize violins to show when more crimes tend to be committed. The above is broken down based on the average temperature each month and then filled in with crime categories. It is quite visible that a larger portion of each crime tend to be committed when temperature is warmer than average (around 17 C) or below average (around 6 C). This could be due to a higher frequency of people out and about during these time frames, allowing for more targets of criminals.
+
+
+###BOX PLOT
+
+```{r}
+
+windspeed<- 17
+clean_data$windcat <- ifelse(clean_data$WindkmhInt >= windspeed, 'high', 'low')
+
+
+
+ggplot(clean_data, aes(x = windspeed, y = WindkmhInt)) +
+  geom_boxplot() +
+  facet_wrap(~ windcat)+
+  labs(x = NULL, y = "Wind Speed (km/h)", title = "Box Plot of Wind Speed")
+
+```
+The Box plot above is broken up into two sections of wind speed, 'high' and 'low'. The idea behind this plot is to look into the varying intensities of wind, which could correlate to a stormy day. On average it appears that higher wind speeds are more common. In a town as close to the sea as Colchester, it would be in line with the weather patterns to have more windy days with storms coming off the water and blowing into town.
+
+
+##Scatter plot
+
+```{r}
+
+library(gridExtra)
+library(ggpubr) 
+
+
+# visibility vs cloud coverage
+cloud_vis<-ggplot(data = clean_data, aes(x = VisKm, y = TotClOct)) +
+  geom_point() +
+  labs(x = "Visibility", y = "Total Cloudiness", title = "Visibility vs. Cloudiness")+
+  geom_smooth(method = "lm", se = FALSE) +
+  stat_cor(method = "pearson", label.x = 0.5, label.y = 0.5)
+
+
+# humidity vs. temp avg
+humidty_temp<- ggplot(data = clean_data, aes(x = HrAvg, y = TemperatureCAvg)) +
+  geom_point() +
+  labs(x = "Humidty", y = "Temperature Avg in C", title = "Humidity Vs. Temperature Avg")+
+  geom_smooth(method = "lm", se = FALSE) + 
+  stat_cor(method = "pearson", label.x = 0.5, label.y = 0.5)
+
+
+#dew point vs temp
+dewpoint_temp<-ggplot(data = clean_data, aes(x = TdAvgC, y = TemperatureCAvg)) +
+  geom_point() +
+  labs(x = "Dew Point", y = "Temperature Avg in C", title = "Dew Point vs. Temperature Avg")+
+  geom_smooth(method = "lm", se = FALSE) +  
+  stat_cor(method = "pearson", label.x = 0.5, label.y = 0.5)
+
+
+#humidity vs wind speed
+humidity_wind<-ggplot(data = clean_data, aes(x = HrAvg, y = WindkmhInt)) +
+  geom_point() +
+  labs(x = "Humidity", y = "Wind Speed", title = "Humidity vs. Windspeed")+
+  geom_smooth(method = "lm", se = FALSE) + 
+  stat_cor(method = "pearson", label.x = 0.5, label.y = 0.5)
+
+grid.arrange(cloud_vis, humidty_temp, dewpoint_temp ,humidity_wind, ncol = 2)
+
+```
+
+Diving more in depth on the temperature 2023 data, scatter plots can be created to find a correlation in the variables. Plotting out two variables to compare will give an estimate as too the effects they have on one another. The most obvious correlation above is seen in the dew point average temperature when compared against the average temperature outside, which makes sense to see such a strong and positive correlation as they both rely on temperature. One that did not have as strong of a correlation is the cloudiness and total visibility. In theory, the cloudier the sky the less visibility one should have, however, it appears to have no real correlation and could be referencing visibility during times of rain or fog.
+
+##correlation analysis
+
+```{r}
+
+
+library(reshape2)
+
+
+cor_matrix<- cor(clean_data[c("TemperatureCAvg", "TdAvgC", "HrAvg", "WindkmhInt", "TotClOct", "VisKm")]) #pick the numeric values in our data and create a corraelation matrix for them
+
+cor_matrix
+
+
+```
+To take a closer look at correlations in the data set a correlation matrix can be used like above. It will run tests on each variable compared to another and show the total correlation values for each. The strongest correlations visible are between Average Temperature and Dew Point, Average Temperature and Visibility, and Dew point and Visibility.
+
+##Time series plot
+
+
+```{r}
+
+library(ggplot2)
+library(plotly)
+
+
+# Create a time series plot
+tempplot<-ggplot(data = clean_data, aes(x = Date, y = TemperatureCAvg)) + #compare temperature by dates
+  geom_line() +
+  labs(x = "Months in 2023", y = "Avg Temperature in C", title = "Time Series Plot (Temp)") +
+  geom_smooth(method = 'loess', se = FALSE, color= 'green') + #add in a smoothing line to show how the trend should continue.
+  theme_minimal()
+
+humidityplot<-ggplot(data = clean_data, aes(x = Date, y = HrAvg)) +
+  geom_line() +
+  labs(x = "Months in 2023", y = "Humidity", title = "Time Series Plot (Humidity)") +
+  geom_smooth(method = 'loess', se = FALSE, color= 'green') +#add in a smoothing line to show how the trend should continue
+  theme_minimal()
+
+visibilityplot<-ggplot(data = clean_data, aes(x = Date, y = VisKm)) +
+  geom_line() +
+  labs(x = "Months in 2023", y = "Visibility", title = "Time Series Plot (Visibility)") +
+  geom_smooth(method = 'loess', se = FALSE, color= 'green') +#add in a smoothing line to show how the trend should continue.
+  theme_minimal()
+
+windspeedplot<-ggplot(data = clean_data, aes(x = Date, y = WindkmhInt)) +
+  geom_line() +
+  labs(x = "Months in 2023", y = "Wind Speed", title = "Time Series Plot (WindSpeed)") +
+  geom_smooth(method = 'loess', se = FALSE, color= 'green') +#add in a smoothing line to show how the trend should continue.
+  theme_minimal()
+
+grid.arrange(tempplot, humidityplot, visibilityplot ,windspeedplot, ncol = 2) #create a gris with two columns to show each of the defined plots above
+
+
+```
+
+The time series grid above gives a look into four different variables, Average Temperature, Wind Speed, Humidity, and Visibility. The green line for each chart shows the trend each variable should follow, however, the only one that closely fits the trend line is Average Temperature. Each chart is broken down by months through the year and where the average of dependent variable falls within the month. Average temperature sees a climb in the summer months and rapid fall in the winter months which would make sense. Humidity is the one that seems a bit off what would be expected. Typically, the most humid seasons are spring and summer, but this chart shows a large drop off in those months climbing only during the autumn and winter months.
+
+
+## map leaflet
+
+```{r}
+
+library('leaflet')
+#some of the code from this was found and utilized from source 4 in references
+
+# Create a leaflet map for top 7 categorizes as more than this tends to run slow
+
+category7 <- head(names(sort(table(clean_data$category), decreasing = TRUE)), 1) #the total amount categories being looked at can be changed here. Right now it is looking at the top one, but the more you add the slower it runs on the computer.
+
+clean_data_7 <- clean_data[clean_data$category %in% category7, ] #check the the category variable you want is within the clean data 7 section
+
+
+map <- leaflet(clean_data_7) %>% #create a map variable that will show the lat and long of the category variable to give us an exact location on a map of where the crime happened
+  addTiles() %>%
+  addMarkers(lng = ~long, lat = ~lat, popup = ~paste("Category: ", category, "<br>Date: ", date)) #add in markers on the map
+
+# Print the map
+map
+
+
+
+
+```
+
+
+
+
+
+The above map shows off the top number of crimes per location based on the latitude and longitude provided in the data set. This map can be changed by defining which variables you want to look at in the code whether it be the top crime as it is currently or, by changing the number ‘1’ in the first line of code, more crime categories can be seen on the map. This will allow a close look of popular locations on a map to avoid with the highest crime rates.
+
+
+##Conclusion
+
+To summarize everything that has gone on above, the most frequent crimes are often committed in shopping areas. They tend to be violent crimes leading to arrests that tend to have no suspects found. The weather can play a small role in crime fluctuation, but overall is not as telling as hypothesized. There are a few correlations between temperature and crime rates, but nothing concrete to prove the specifics of when a crime will occur. With more research and sufficient data, a trend could be seen in the seasons or even months that host the most crime and be given to a police force to give a reason to reinforce extra parole during certain seasons.
+
+
+
+
+
+#References
+
+1.What is a “good” palette for divergent colors in R? (or: can viridis and magma be combined together?) [Internet]. Stack Overflow. [cited 2024 Apr 24]. Available from: https://stackoverflow.com/questions/37482977/what-is-a-good-palette-for-divergent-colors-in-r-or-can-viridis-and-magma-b/52812120#52812120
+
+2.pyplot/matplotlib Bar chart with fill color depending on value [Internet]. Stack Overflow. [cited 2024 Apr 24]. Available from: https://stackoverflow.com/questions/31313606/pyplot-matplotlib-bar-chart-with-fill-color-depending-on-value
+
+3. Density Plots in R [Internet]. Stack Overflow. [cited 2024 Apr 24]. Available from: https://stackoverflow.com/questions/66324807/density-plots-in-r
+
+4. Leaflet Map in R as a Globe [Internet]. Stack Overflow. [cited 2024 Apr 24]. Available from: https://stackoverflow.com/questions/52218702/leaflet-map-in-r-as-a-globe
+‌
